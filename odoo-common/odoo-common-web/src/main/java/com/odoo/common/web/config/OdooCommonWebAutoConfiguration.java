@@ -13,7 +13,9 @@ import org.springframework.context.annotation.Import;
 @ComponentScan(basePackages = "com.odoo.common.web")
 @Import({
     CorsConfig.class,
-    JacksonConfig.class
+    JacksonConfig.class,
+    WebConfig.class,
+    AsyncConfig.class
 })
 public class OdooCommonWebAutoConfiguration {
     
