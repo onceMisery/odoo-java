@@ -1,0 +1,188 @@
+version: '3.8'
+
+services:
+  # MySQL 8.0 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: odoo-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: odoo_dev
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deployment/mysql/conf:/etc/mysql/conf.d
+      - ./deployment/mysql/init:/docker-entrypoint-initdb.d
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone='+8:00'
+      --innodb-buffer-pool-size=256M
+    networks:
+      - odoo-network
+
+  # Redis 缓存服务
+  redis:
+    image: redis:7.0-alpine
+    container_name: odoo-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./deployment/redis/redis.conf:/etc/redis/redis.conf
+    command: redis-server /etc/redis/redis.conf
+    networks:
+      - odoo-network
+
+  # Nacos 服务发现和配置中心
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: odoo-nacos
+    restart: always
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos_config
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: root123
+      MYSQL_SERVICE_DB_PARAM: characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useSSL=false&serverTimezone=Asia/Shanghai
+      NACOS_AUTH_ENABLE: true
+      NACOS_AUTH_TOKEN: ODJhZGYxYjAtZGJmMS00YTQxLWE3NDMtODJiZGY4ODg2NjIz
+      NACOS_AUTH_IDENTITY_KEY: nacos
+      NACOS_AUTH_IDENTITY_VALUE: nacos
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos_logs:/home/nacos/logs
+    depends_on:
+      - mysql
+    networks:
+      - odoo-network
+
+  # Elasticsearch 搜索引擎
+  elasticsearch:
+    image: elasticsearch:7.17.15
+    container_name: odoo-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - odoo-network
+
+  # Apache Pulsar 消息队列
+  pulsar:
+    image: apachepulsar/pulsar:3.0.2
+    container_name: odoo-pulsar
+    restart: always
+    command: >
+      sh -c "bin/apply-config-from-env.py conf/standalone.conf &&
+             bin/pulsar standalone"
+    environment:
+      PULSAR_MEM: -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+    ports:
+      - "6650:6650"
+      - "8080:8080"
+    volumes:
+      - pulsar_data:/pulsar/data
+    networks:
+      - odoo-network
+
+  # MinIO 对象存储
+  minio:
+    image: minio/minio:latest
+    container_name: odoo-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: odoo-admin
+      MINIO_ROOT_PASSWORD: odoo123456
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - odoo-network
+
+  # Prometheus 监控
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: odoo-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployment/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - odoo-network
+
+  # Grafana 监控面板
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: odoo-grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployment/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - odoo-network
+
+  # Nginx 负载均衡
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: odoo-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./deployment/nginx/conf.d:/etc/nginx/conf.d
+      - nginx_logs:/var/log/nginx
+    networks:
+      - odoo-network
+
+networks:
+  odoo-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  nacos_logs:
+  elasticsearch_data:
+  pulsar_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+  nginx_logs: 
