@@ -71,7 +71,7 @@
                     │ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
                     │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
                     │ │监控告警  │ │日志收集  │ │链路追踪  │ │部署平台  │   │
-                    │ │Prometheus│ │   ELK    │ │ Zipkin   │ │Kubernetes│   │
+                    │ │Prometheus│ │   ELK    │ │ skywalking   │ │Kubernetes│   │
                     │ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
                     └─────────────────────────────────────────────────────────┘
 ```
@@ -647,32 +647,8 @@ public class CustomHealthIndicator implements HealthIndicator {
 
 ### 6.2 链路追踪
 
-#### Zipkin分布式追踪
-```yaml
-spring:
-  zipkin:
-    base-url: http://zipkin-server:9411
-    sender:
-      type: web
-  sleuth:
-    sampler:
-      probability: 0.1  # 采样率10%
-    zipkin:
-      enabled: true
-```
+#### apache skyWalking 分布式追踪
 
-```java
-@RestController
-public class CustomerController {
-    
-    @NewSpan("get-customer")
-    @GetMapping("/customers/{id}")
-    public Result<CustomerDTO> getCustomer(@PathVariable Long id) {
-        // 自动创建Span进行链路追踪
-        return Result.success(customerService.getCustomer(id));
-    }
-}
-```
 
 ## 七、部署架构设计
 
